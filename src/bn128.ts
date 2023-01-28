@@ -2,10 +2,34 @@ import { buildBn128 as buildBn128wasm } from "wasmcurves";
 import buildEngine from "./engine.js";
 import * as Scalar from "./scalar.js";
 import { ModuleBuilder } from "wasmbuilder";
+import { Curve } from "./engine.js"; 
+
+declare global {
+    var curve_bn128: Curve | null;
+}
 
 globalThis.curve_bn128 = null;
 
-export default async function buildBn128(singleThread, plugins) {
+export type Bn128Wasm ={
+    code: any,
+    pq: bigint,
+    pr: bigint,
+    pG1gen: bigint,
+    pG1zero: bigint,
+    pG1b: bigint,
+    pG2gen: bigint,
+    pG2zero: bigint,
+    pG2b: bigint,
+    pOneT: bigint,
+    prePSize: number,
+    preQSize: number,
+    n8q: number,
+    n8r: number,
+    q: bigint,
+    r: bigint,
+}
+
+export default async function buildBn128(singleThread?: boolean, plugins?: (moduleBuilder: ModuleBuilder) => void) {
 
     const moduleBuilder = new ModuleBuilder();
     moduleBuilder.setMemory(25);
@@ -13,7 +37,7 @@ export default async function buildBn128(singleThread, plugins) {
 
     if (plugins) plugins(moduleBuilder);
 
-    const bn128wasm = {};
+    const bn128wasm: Partial<Bn128Wasm> = {};
 
     bn128wasm.code = moduleBuilder.build();
     bn128wasm.pq = moduleBuilder.modules.f1m.pq;
@@ -35,7 +59,7 @@ export default async function buildBn128(singleThread, plugins) {
     if ((!singleThread) && (globalThis.curve_bn128)) return globalThis.curve_bn128;
     const params = {
         name: "bn128",
-        wasm: bn128wasm,
+        wasm: bn128wasm as Bn128Wasm,
         q: Scalar.e("21888242871839275222246405745257275088696311157297823662689037894645226208583"),
         r: Scalar.e("21888242871839275222246405745257275088548364400416034343698204186575808495617"),
         n8q: 32,

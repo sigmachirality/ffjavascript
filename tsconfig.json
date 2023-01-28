@@ -1,0 +1,11 @@
+{
+  "compilerOptions": {
+    "outDir": "./build",
+    "allowJs": true,
+    "strict": true,
+    "target": "ESNext",
+    "noImplicitAny": true,
+  },
+  "include": ["main.ts", "src/**/*"],
+  "exclude": ["node_modules", "build"]
+}

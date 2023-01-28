@@ -1,7 +1,17 @@
+import type { Curve } from './engine'
 
-export default function buildPairing(curve) {
+export interface Pairing {
+    pairing: (a: Uint8Array, b: Uint8Array) => Uint8Array
+    pairingEq: (...args: (Uint8Array[]| [...Uint8Array[], number])) => Promise<boolean>
+    prepareG1: (p: Uint8Array) => Uint8Array
+    prepareG2: (p: Uint8Array) => Uint8Array
+    millerLoop: (preQ: Uint8Array, preP: Uint8Array) => Uint8Array
+    finalExponentiation: (a: Uint8Array) => Uint8Array
+}
+
+export default function buildPairing(curve: Curve) {
     const tm = curve.tm;
-    curve.pairing = function pairing(a, b) {
+    curve.pairing = function pairing(a: Uint8Array, b: Uint8Array) {
 
         tm.startSyncOp();
         const pA = tm.allocBuff(curve.G1.toJacobian(a));
@@ -16,48 +26,54 @@ export default function buildPairing(curve) {
     };
 
     curve.pairingEq = async function pairingEq() {
-        let  buffCt;
+        let buffCt;
         let nEqs;
         if ((arguments.length % 2) == 1) {
-            buffCt = arguments[arguments.length-1];
-            nEqs = (arguments.length -1) /2;
+            buffCt = arguments[arguments.length - 1];
+            nEqs = (arguments.length - 1) / 2;
         } else {
             buffCt = curve.Gt.one;
-            nEqs = arguments.length /2;
+            nEqs = arguments.length / 2;
         }
 
         const opPromises = [];
-        for (let i=0; i<nEqs; i++) {
+        for (let i = 0; i < nEqs; i++) {
 
             const task = [];
 
-            const g1Buff = curve.G1.toJacobian(arguments[i*2]);
-            task.push({cmd: "ALLOCSET", var: 0, buff: g1Buff});
-            task.push({cmd: "ALLOC", var: 1, len: curve.prePSize});
+            const g1Buff = curve.G1.toJacobian(arguments[i * 2]);
+            task.push({ cmd: "ALLOCSET", var: 0, buff: g1Buff });
+            task.push({ cmd: "ALLOC", var: 1, len: curve.prePSize });
 
-            const g2Buff = curve.G2.toJacobian(arguments[i*2 +1]);
-            task.push({cmd: "ALLOCSET", var: 2, buff: g2Buff});
-            task.push({cmd: "ALLOC", var: 3, len: curve.preQSize});
+            const g2Buff = curve.G2.toJacobian(arguments[i * 2 + 1]);
+            task.push({ cmd: "ALLOCSET", var: 2, buff: g2Buff });
+            task.push({ cmd: "ALLOC", var: 3, len: curve.preQSize });
 
-            task.push({cmd: "ALLOC", var: 4, len: curve.Gt.n8});
+            task.push({ cmd: "ALLOC", var: 4, len: curve.Gt.n8 });
 
-            task.push({cmd: "CALL", fnName: curve.name + "_prepareG1", params: [
-                {var: 0},
-                {var: 1}
-            ]});
+            task.push({
+                cmd: "CALL", fnName: curve.name + "_prepareG1", params: [
+                    { var: 0 },
+                    { var: 1 }
+                ]
+            });
 
-            task.push({cmd: "CALL", fnName: curve.name + "_prepareG2", params: [
-                {var: 2},
-                {var: 3}
-            ]});
+            task.push({
+                cmd: "CALL", fnName: curve.name + "_prepareG2", params: [
+                    { var: 2 },
+                    { var: 3 }
+                ]
+            });
 
-            task.push({cmd: "CALL", fnName: curve.name + "_millerLoop", params: [
-                {var: 1},
-                {var: 3},
-                {var: 4}
-            ]});
+            task.push({
+                cmd: "CALL", fnName: curve.name + "_millerLoop", params: [
+                    { var: 1 },
+                    { var: 3 },
+                    { var: 4 }
+                ]
+            });
 
-            task.push({cmd: "GET", out: 0, var: 4, len: curve.Gt.n8});
+            task.push({ cmd: "GET", out: 0, var: 4, len: curve.Gt.n8 });
 
             opPromises.push(
                 tm.queueAction(task)
@@ -71,7 +87,7 @@ export default function buildPairing(curve) {
         const pRes = tm.alloc(curve.Gt.n8);
         tm.instance.exports.ftm_one(pRes);
 
-        for (let i=0; i<result.length; i++) {
+        for (let i = 0; i < result.length; i++) {
             const pMR = tm.allocBuff(result[i][0]);
             tm.instance.exports.ftm_mul(pRes, pMR, pRes);
         }
@@ -86,7 +102,7 @@ export default function buildPairing(curve) {
         return r;
     };
 
-    curve.prepareG1 = function(p) {
+    curve.prepareG1 = function (p) {
         this.tm.startSyncOp();
         const pP = this.tm.allocBuff(p);
         const pPrepP = this.tm.alloc(this.prePSize);
@@ -96,7 +112,7 @@ export default function buildPairing(curve) {
         return res;
     };
 
-    curve.prepareG2 = function(q) {
+    curve.prepareG2 = function (q) {
         this.tm.startSyncOp();
         const pQ = this.tm.allocBuff(q);
         const pPrepQ = this.tm.alloc(this.preQSize);
@@ -106,7 +122,7 @@ export default function buildPairing(curve) {
         return res;
     };
 
-    curve.millerLoop = function(preP, preQ) {
+    curve.millerLoop = function (preP, preQ) {
         this.tm.startSyncOp();
         const pPreP = this.tm.allocBuff(preP);
         const pPreQ = this.tm.allocBuff(preQ);
@@ -117,7 +133,7 @@ export default function buildPairing(curve) {
         return res;
     };
 
-    curve.finalExponentiation = function(a) {
+    curve.finalExponentiation = function (a) {
         this.tm.startSyncOp();
         const pA = this.tm.allocBuff(a);
         const pRes = this.tm.alloc(this.Gt.n8);

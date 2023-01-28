@@ -5,6 +5,7 @@
     "strict": true,
     "target": "ESNext",
     "noImplicitAny": true,
+    "moduleResolution": "node"
   },
   "include": ["main.ts", "src/**/*"],
   "exclude": ["node_modules", "build"]

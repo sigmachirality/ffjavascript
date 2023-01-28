@@ -2,10 +2,34 @@ import { buildBls12381 as buildBls12381wasm } from "wasmcurves";
 import buildEngine from "./engine.js";
 import * as Scalar from "./scalar.js";
 import { ModuleBuilder } from "wasmbuilder";
+import { Curve } from "./engine.js"; 
+
+declare global {
+    var curve_bls12381: Curve | null;
+}
 
 globalThis.curve_bls12381 = null;
 
-export default async function buildBls12381(singleThread, plugins) {
+export type Bls12381Wasm = {
+    code: any;
+    pq: bigint;
+    pr: bigint;
+    pG1gen: bigint;
+    pG1zero: bigint;
+    pG1b: bigint;
+    pG2gen: bigint;
+    pG2zero: bigint;
+    pG2b: bigint;
+    pOneT: bigint;
+    prePSize: number;
+    preQSize: number;
+    n8q: number;
+    n8r: number;
+    q: bigint;
+    r: bigint;
+}
+
+export default async function buildBls12381(singleThread?: boolean, plugins?: (moduleBuilder: ModuleBuilder) => void) {
 
     const moduleBuilder = new ModuleBuilder();
     moduleBuilder.setMemory(25);
@@ -13,7 +37,7 @@ export default async function buildBls12381(singleThread, plugins) {
 
     if (plugins) plugins(moduleBuilder);
 
-    const bls12381wasm = {};
+    const bls12381wasm: Partial<Bls12381Wasm> = {};
 
     bls12381wasm.code = moduleBuilder.build();
     bls12381wasm.pq = moduleBuilder.modules.f1m.pq;
@@ -36,7 +60,7 @@ export default async function buildBls12381(singleThread, plugins) {
     if ((!singleThread) && (globalThis.curve_bls12381)) return globalThis.curve_bls12381;
     const params = {
         name: "bls12381",
-        wasm: bls12381wasm,
+        wasm: bls12381wasm as Bls12381Wasm,
         q: Scalar.e("1a0111ea397fe69a4b1ba7b6434bacd764774b84f38512bf6730d2a0f6b0f6241eabfffeb153ffffb9feffffffffaaab", 16),
         r: Scalar.e("73eda753299d7d483339d80809a1d80553bda402fffe5bfeffffffff00000001", 16),
         n8q: 48,

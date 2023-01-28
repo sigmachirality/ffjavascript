@@ -1,13 +1,50 @@
 import * as Scalar from "./scalar.js";
 import * as utils from "./utils.js";
 import { getThreadRng } from "./random.js";
-import buildBatchConvert from "./engine_batchconvert.js";
+import buildBatchConvert, { BatchConvert } from "./engine_batchconvert.js";
 import BigBuffer from "./bigbuffer.js";
 
+import type { ThreadManager } from "./threadman";
+import type { WasmF1Element } from "./types/field.js";
+import ChaCha from "./chacha.js";
+
+type Bufferish = ArrayLike<number> | ArrayBufferLike;
 
 export default class WasmField1 {
+    tm: ThreadManager;
+    prefix: string;
 
-    constructor(tm, prefix, n8, p) {
+    type: "F1";
+    one: Uint8Array;
+    zero: Uint8Array;
+    p: bigint;
+    m: 1;
+    negone: Uint8Array;
+    two: Uint8Array;
+    half: bigint;
+    bitLength: number;
+    mask: bigint;
+
+    n64: number;
+    n32: number;
+    n8: number;
+    nqr: Uint8Array;
+    s: number;
+
+    pOp1: number;
+    pOp2: number;
+    pOp3: number;
+
+    shift: Uint8Array;
+    shiftInv: Uint8Array;
+
+    w: Uint8Array[];
+
+    batchToMontgomery: BatchConvert;
+    batchFromMontgomery: BatchConvert;
+
+
+    constructor(tm: ThreadManager, prefix: string, n8: number, p: bigint) {
         this.tm = tm;
         this.prefix = prefix;
 
@@ -31,10 +68,10 @@ export default class WasmField1 {
         this.negone = this.neg(this.one);
         this.two = this.add(this.one, this.one);
 
-        this.n64 = Math.floor(n8/8);
-        this.n32 = Math.floor(n8/4);
+        this.n64 = Math.floor(n8 / 8);
+        this.n32 = Math.floor(n8 / 4);
 
-        if(this.n64*8 != this.n8) {
+        if (this.n64 * 8 != this.n8) {
             throw new Error("n8 must be a multiple of 8");
         }
 
@@ -52,7 +89,7 @@ export default class WasmField1 {
         this.s = 0;
         let t = Scalar.sub(this.p, Scalar.one);
 
-        while ( !Scalar.isOdd(t) ) {
+        while (!Scalar.isOdd(t)) {
             this.s = this.s + 1;
             t = Scalar.shiftRight(t, Scalar.one);
         }
@@ -60,8 +97,8 @@ export default class WasmField1 {
         this.w = [];
         this.w[this.s] = this.exp(this.nqr, t);
 
-        for (let i= this.s-1; i>=0; i--) {
-            this.w[i] = this.square(this.w[i+1]);
+        for (let i = this.s - 1; i >= 0; i--) {
+            this.w[i] = this.square(this.w[i + 1]);
         }
 
         if (!this.eq(this.w[0], this.one)) {
@@ -73,68 +110,68 @@ export default class WasmField1 {
     }
 
 
-    op2(opName, a, b) {
+    op2(opName: string, a: Bufferish, b: Bufferish) {
         this.tm.setBuff(this.pOp1, a);
         this.tm.setBuff(this.pOp2, b);
         this.tm.instance.exports[this.prefix + opName](this.pOp1, this.pOp2, this.pOp3);
         return this.tm.getBuff(this.pOp3, this.n8);
     }
 
-    op2Bool(opName, a, b) {
+    op2Bool(opName: string, a: Bufferish, b: Bufferish) {
         this.tm.setBuff(this.pOp1, a);
         this.tm.setBuff(this.pOp2, b);
         return !!this.tm.instance.exports[this.prefix + opName](this.pOp1, this.pOp2);
     }
 
-    op1(opName, a) {
+    op1(opName: string, a: Bufferish) {
         this.tm.setBuff(this.pOp1, a);
         this.tm.instance.exports[this.prefix + opName](this.pOp1, this.pOp3);
         return this.tm.getBuff(this.pOp3, this.n8);
     }
 
-    op1Bool(opName, a) {
+    op1Bool(opName: string, a: Bufferish) {
         this.tm.setBuff(this.pOp1, a);
         return !!this.tm.instance.exports[this.prefix + opName](this.pOp1, this.pOp3);
     }
 
-    add(a,b) {
+    add(a: Bufferish, b: Bufferish) {
         return this.op2("_add", a, b);
     }
 
 
-    eq(a,b) {
+    eq(a: Bufferish, b: Bufferish) {
         return this.op2Bool("_eq", a, b);
     }
 
-    isZero(a) {
+    isZero(a: Bufferish) {
         return this.op1Bool("_isZero", a);
     }
 
-    sub(a,b) {
+    sub(a: Bufferish, b: Bufferish) {
         return this.op2("_sub", a, b);
     }
 
-    neg(a) {
+    neg(a: Bufferish) {
         return this.op1("_neg", a);
     }
 
-    inv(a) {
+    inv(a: Bufferish) {
         return this.op1("_inverse", a);
     }
 
-    toMontgomery(a) {
+    toMontgomery(a: Bufferish) {
         return this.op1("_toMontgomery", a);
     }
 
-    fromMontgomery(a) {
+    fromMontgomery(a: Bufferish) {
         return this.op1("_fromMontgomery", a);
     }
 
-    mul(a,b) {
+    mul(a: Bufferish, b: Bufferish) {
         return this.op2("_mul", a, b);
     }
 
-    div(a, b) {
+    div(a: Bufferish, b: Bufferish) {
         this.tm.setBuff(this.pOp1, a);
         this.tm.setBuff(this.pOp2, b);
         this.tm.instance.exports[this.prefix + "_inverse"](this.pOp2, this.pOp2);
@@ -142,19 +179,19 @@ export default class WasmField1 {
         return this.tm.getBuff(this.pOp3, this.n8);
     }
 
-    square(a) {
+    square(a: Bufferish) {
         return this.op1("_square", a);
     }
 
-    isSquare(a) {
+    isSquare(a: Bufferish) {
         return this.op1Bool("_isSquare", a);
     }
 
-    sqrt(a) {
+    sqrt(a: Bufferish) {
         return this.op1("_sqrt", a);
     }
 
-    exp(a, b) {
+    exp(a: Bufferish, b: bigint | Uint8Array) {
         if (!(b instanceof Uint8Array)) {
             b = Scalar.toLEBuff(Scalar.e(b));
         }
@@ -164,11 +201,11 @@ export default class WasmField1 {
         return this.tm.getBuff(this.pOp3, this.n8);
     }
 
-    isNegative(a) {
+    isNegative(a: Bufferish) {
         return this.op1Bool("_isNegative", a);
     }
 
-    e(a, b) {
+    e(a: Uint8Array | Scalar.BigIntish, b?: Scalar.Radix) {
         if (a instanceof Uint8Array) return a;
         let ra = Scalar.e(a, b);
         if (Scalar.isNegative(ra)) {
@@ -186,19 +223,19 @@ export default class WasmField1 {
         return this.toMontgomery(buff);
     }
 
-    toString(a, radix) {
+    toString(a: Bufferish, radix?: Scalar.Radix) {
         const an = this.fromMontgomery(a);
         const s = Scalar.fromRprLE(an, 0);
         return Scalar.toString(s, radix);
     }
 
-    fromRng(rng) {
+    fromRng(rng: ChaCha) {
         let v;
         const buff = new Uint8Array(this.n8);
         do {
             v = Scalar.zero;
-            for (let i=0; i<this.n64; i++) {
-                v = Scalar.add(v,  Scalar.shiftLeft(rng.nextU64(), 64*i));
+            for (let i = 0; i < this.n64; i++) {
+                v = Scalar.add(v, Scalar.shiftLeft(rng.nextU64(), 64 * i));
             }
             v = Scalar.band(v, this.mask);
         } while (Scalar.geq(v, this.p));
@@ -210,76 +247,81 @@ export default class WasmField1 {
         return this.fromRng(getThreadRng());
     }
 
-    toObject(a) {
+    toObject(a: Bufferish) {
         const an = this.fromMontgomery(a);
         return Scalar.fromRprLE(an, 0);
     }
 
-    fromObject(a) {
+    fromObject(a: Scalar.BigIntish) {
         const buff = new Uint8Array(this.n8);
         Scalar.toRprLE(buff, 0, a, this.n8);
         return this.toMontgomery(buff);
     }
 
-    toRprLE(buff, offset, a) {
+    toRprLE(buff: WasmF1Element, offset: number, a: Bufferish) {
         buff.set(this.fromMontgomery(a), offset);
     }
 
-    toRprBE(buff, offset, a) {
+    toRprBE(buff: WasmF1Element, offset: number, a: Bufferish) {
         const buff2 = this.fromMontgomery(a);
-        for (let i=0; i<this.n8/2; i++) {
+        for (let i = 0; i < this.n8 / 2; i++) {
             const aux = buff2[i];
-            buff2[i] = buff2[this.n8-1-i];
-            buff2[this.n8-1-i] = aux;
+            buff2[i] = buff2[this.n8 - 1 - i];
+            buff2[this.n8 - 1 - i] = aux;
         }
         buff.set(buff2, offset);
     }
 
-    fromRprLE(buff, offset) {
+    fromRprLE(buff: ArrayBufferLike, offset: number) {
         offset = offset || 0;
         const res = buff.slice(offset, offset + this.n8);
         return this.toMontgomery(res);
     }
 
-    async batchInverse(buffIn) {
+    batchInverse(buffIn: Uint8Array): Promise<Uint8Array>;
+    batchInverse(buffIn: Uint8Array): Promise<Uint8Array>;
+    batchInverse(buffIn: BigBuffer): Promise<BigBuffer>;
+    async batchInverse(buffIn: Uint8Array | Uint8Array[] | BigBuffer): Promise<WasmF1Element | WasmF1Element[]> {
         let returnArray = false;
         const sIn = this.n8;
         const sOut = this.n8;
 
         if (Array.isArray(buffIn)) {
-            buffIn = utils.array2buffer(buffIn, sIn );
+            buffIn = utils.array2buffer(buffIn, sIn);
             returnArray = true;
         } else {
-            buffIn = buffIn.slice(0, buffIn.byteLength);
+            buffIn = buffIn.slice(0, buffIn.byteLength)!;
         }
 
         const nPoints = Math.floor(buffIn.byteLength / sIn);
-        if ( nPoints * sIn !== buffIn.byteLength) {
+        if (nPoints * sIn !== buffIn.byteLength) {
             throw new Error("Invalid buffer size");
         }
-        const pointsPerChunk = Math.floor(nPoints/this.tm.concurrency);
+        const pointsPerChunk = Math.floor(nPoints / this.tm.concurrency!);
         const opPromises = [];
-        for (let i=0; i<this.tm.concurrency; i++) {
+        for (let i = 0; i < this.tm.concurrency!; i++) {
             let n;
-            if (i< this.tm.concurrency-1) {
+            if (i < this.tm.concurrency! - 1) {
                 n = pointsPerChunk;
             } else {
-                n = nPoints - i*pointsPerChunk;
+                n = nPoints - i * pointsPerChunk;
             }
-            if (n==0) continue;
+            if (n == 0) continue;
 
-            const buffChunk = buffIn.slice(i*pointsPerChunk*sIn, i*pointsPerChunk*sIn + n*sIn);
+            const buffChunk = buffIn.slice(i * pointsPerChunk * sIn, i * pointsPerChunk * sIn + n * sIn);
             const task = [
-                {cmd: "ALLOCSET", var: 0, buff:buffChunk},
-                {cmd: "ALLOC", var: 1, len:sOut * n},
-                {cmd: "CALL", fnName: this.prefix + "_batchInverse", params: [
-                    {var: 0},
-                    {val: sIn},
-                    {val: n},
-                    {var: 1},
-                    {val: sOut},
-                ]},
-                {cmd: "GET", out: 0, var: 1, len:sOut * n},
+                { cmd: "ALLOCSET", var: 0, buff: buffChunk },
+                { cmd: "ALLOC", var: 1, len: sOut * n },
+                {
+                    cmd: "CALL", fnName: this.prefix + "_batchInverse", params: [
+                        { var: 0 },
+                        { val: sIn },
+                        { val: n },
+                        { var: 1 },
+                        { val: sOut },
+                    ]
+                },
+                { cmd: "GET", out: 0, var: 1, len: sOut * n },
             ];
             opPromises.push(
                 this.tm.queueAction(task)
@@ -290,19 +332,19 @@ export default class WasmField1 {
 
         let fullBuffOut;
         if (buffIn instanceof BigBuffer) {
-            fullBuffOut = new BigBuffer(nPoints*sOut);
+            fullBuffOut = new BigBuffer(nPoints * sOut);
         } else {
-            fullBuffOut = new Uint8Array(nPoints*sOut);
+            fullBuffOut = new Uint8Array(nPoints * sOut);
         }
 
-        let p =0;
-        for (let i=0; i<result.length; i++) {
+        let p = 0;
+        for (let i = 0; i < result.length; i++) {
             fullBuffOut.set(result[i][0], p);
-            p+=result[i][0].byteLength;
+            p += result[i][0].byteLength;
         }
 
         if (returnArray) {
-            return utils.buffer2array(fullBuffOut, sOut);
+            return utils.buffer2array(fullBuffOut as Uint8Array, sOut);
         } else {
             return fullBuffOut;
         }

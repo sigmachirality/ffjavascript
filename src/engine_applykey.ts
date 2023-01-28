@@ -3,9 +3,9 @@ import { FFTType, GroupName } from "./engine_fft.js";
 import { BigIntish } from "./scalar.js";
 import { ThreadManager } from "./threadman.js";
 import { ThreadTask } from "./threadman_thread.js";
-import WasmField1 from "./wasm_field1.js"; 
+import { Field } from "./types/field.js";
+import WasmField1 from "./wasm_field1.js";
 import WasmField2 from "./wasm_field2.js";
-import WasmField3 from "./wasm_field3.js";
 
 type BatchApplyKey = 
     ((buff: Uint8Array, first: BigIntish, inc: BigIntish, inType?: FFTType, outType?: FFTType) => Promise<Uint8Array>) |
@@ -13,11 +13,11 @@ type BatchApplyKey =
 
 export default function buildBatchApplyKey(
     curve: {
-        Fr: WasmField1,
+        Fr: WasmField1 | WasmField2,
         tm: ThreadManager,
     } & Record<GroupName, { 
-        F: WasmField1 | WasmField2 | WasmField3, // TODO: create function overload for different group names
-        n8: number, // TODO: 
+        F: Field, // TODO: create function overload for different group names
+        n8: number,
         batchApplyKey: BatchApplyKey 
     }>,
     groupName: GroupName
@@ -26,9 +26,13 @@ export default function buildBatchApplyKey(
     const Fr = curve.Fr;
     const tm = curve.tm;
 
-    async function batchApplyKey(buff: Uint8Array, first: BigIntish, inc: BigIntish, inType?: FFTType, outType?: FFTType): Promise<Uint8Array>;
-    async function batchApplyKey(buff: BigBuffer, first: BigIntish, inc: BigIntish, inType?: FFTType, outType?: FFTType): Promise<BigBuffer>;
-    async function batchApplyKey(buff: Uint8Array | BigBuffer, first: BigIntish, inc: BigIntish, inType?: FFTType, outType?: FFTType) {
+    async function batchApplyKey<Buffer extends Uint8Array | BigBuffer>(
+        buff: Buffer,
+        first: BigIntish,
+        inc: BigIntish,
+        inType?: FFTType,
+        outType?: FFTType
+    ): Promise<Buffer> {
         inType = inType || "affine";
         outType = outType || "affine";
         let fnName, fnAffine;
@@ -125,11 +129,11 @@ export default function buildBatchApplyKey(
 
         const result = await Promise.all(opPromises);
 
-        let outBuff;
+        let outBuff: Buffer;
         if (buff instanceof BigBuffer) {
-            outBuff = new BigBuffer(nPoints * sGout);
+            outBuff = new BigBuffer(nPoints * sGout) as Buffer;
         } else {
-            outBuff = new Uint8Array(nPoints * sGout);
+            outBuff = new Uint8Array(nPoints * sGout) as Buffer;
         }
 
         let p = 0;

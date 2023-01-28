@@ -2,8 +2,10 @@
 
 import * as Scalar from "./scalar.js";
 
+type Seed = [number, number, number, number, number, number, number, number];
+type State = [number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number];
 
-function quarterRound(st, a, b, c, d) {
+function quarterRound(st: State, a: number, b: number, c: number, d: number) {
 
     st[a] = (st[a] + st[b]) >>> 0;
     st[d] = (st[d] ^ st[a]) >>> 0;
@@ -22,7 +24,7 @@ function quarterRound(st, a, b, c, d) {
     st[b] = ((st[b] << 7) | ((st[b]>>>25) & 0x7F)) >>> 0;
 }
 
-function doubleRound(st) {
+function doubleRound(st: State) {
     quarterRound(st, 0, 4, 8,12);
     quarterRound(st, 1, 5, 9,13);
     quarterRound(st, 2, 6,10,14);
@@ -35,8 +37,11 @@ function doubleRound(st) {
 }
 
 export default class ChaCha {
+    state: State;
+    idx: number;
+    buff: State;
 
-    constructor(seed) {
+    constructor(seed?: Seed) {
         seed = seed || [0,0,0,0,0,0,0,0];
         this.state = [
             0x61707865,
@@ -57,7 +62,7 @@ export default class ChaCha {
             0
         ];
         this.idx = 16;
-        this.buff = new Array(16);
+        this.buff = new Array<number>(16) as State;
     }
 
     nextU32() {

@@ -5,7 +5,8 @@
     "strict": true,
     "target": "ESNext",
     "noImplicitAny": true,
-    "moduleResolution": "node"
+    "moduleResolution": "node",
+    "lib": ["ESNext", "WebWorker"],
   },
   "include": ["main.ts", "src/**/*"],
   "exclude": ["node_modules", "build"]

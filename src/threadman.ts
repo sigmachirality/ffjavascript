@@ -55,10 +55,10 @@ const threadSource = stringToBase64("(" + thread.toString() + ")(self)");
 const workerSource = "data:application/javascript;base64," + threadSource;
 
 
-type InitalizedThreadManager = SimpleThreadManager | ConcurrentThreadManager;
-
+export default async function buildThreadManager(wasm: unknown, singleThread: true): Promise<SimpleThreadManager>;
+export default async function buildThreadManager(wasm: unknown, singleThread: true): Promise<ConcurrentThreadManager>;
 export default async function buildThreadManager(wasm: unknown, singleThread: boolean):
-Promise<SimpleThreadManager | ConcurrentThreadManager> {
+  Promise<SimpleThreadManager | ConcurrentThreadManager> {
   const tm = new ThreadManager();
 
   tm.memory = new WebAssembly.Memory({ initial: MEM_SIZE });
@@ -112,7 +112,7 @@ Promise<SimpleThreadManager | ConcurrentThreadManager> {
         } else {
           data = e;
         }
-  
+
         _tm.working[i] = false;
         _tm.pendingDeferreds[i].resolve(data);
         _tm.processWorks();
@@ -221,7 +221,7 @@ class ThreadManager {
 
   postAction(workerId: number, e: any, transfers: any, _deferred?: Deferred) {
     if (this.singleThread) throw Error("this is a singlethreaded threadmanager");
-    
+
     const _tm = this as unknown as ConcurrentThreadManager;
     if (_tm.working[workerId]) {
       throw new Error("Posting a job t a working worker");
@@ -282,7 +282,7 @@ class ThreadManager {
     return this.u8.slice(pointer, pointer + length);
   }
 
-  setBuff(pointer: number, buffer:  ArrayLike<number> | ArrayBufferLike) {
+  setBuff(pointer: number, buffer: ArrayLike<number> | ArrayBufferLike) {
     if (!this.u8) throw new Error("ThreadManager uninitialized");
     this.u8.set(new Uint8Array(buffer), pointer);
   }

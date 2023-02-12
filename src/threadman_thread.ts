@@ -4,7 +4,7 @@ import BigBuffer from "./bigbuffer"
 
 export type InitTask = {
     cmd: "INIT",
-    code: any,
+    code: any, // TODO: type this
     init: number
 }
 
@@ -47,26 +47,27 @@ export type ThreadTask = InitTask | TerminateTask | AllocSetTask | AllocTask | S
 
 
 export default function thread(self?: DedicatedWorkerGlobalScope) {
-    const MAXMEM = 32767;
+    const MAXMEM = 32767 as const;
     let instance: {
         exports: { [key: string]: CallableFunction }
     };
     let memory: WebAssembly.Memory;
 
     if (self) {
-        self.onmessage = function (e: any) {
-            let data: any;
-            if (e.data) {
+        self.onmessage = function (e: ThreadTask[] | MessageEvent<ThreadTask[]>) {
+            let data: ThreadTask[];
+            if (e instanceof MessageEvent) {
                 data = e.data;
             } else {
                 data = e;
             }
 
-            if (data[0].cmd == "INIT") {
-                init(data[0]).then(function () {
-                    self.postMessage(data.result);
+            if (data[0].cmd === "INIT") {
+                const initTask = data[0];
+                init(initTask).then(function () {
+                    self.postMessage(data.result); //TODO: ???? does this line do
                 });
-            } else if (data[0].cmd == "TERMINATE") {
+            } else if (data[0].cmd === "TERMINATE") {
                 self.close();
             } else {
                 const res = runTask(data);

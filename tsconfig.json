@@ -6,7 +6,8 @@
     "target": "ESNext",
     "noImplicitAny": true,
     "moduleResolution": "node",
-    "lib": ["ESNext", "WebWorker"],
+    "allowSyntheticDefaultImports": true,
+    "lib": ["ESNext", "WebWorker", "DOM"],
   },
   "include": ["main.ts", "src/**/*"],
   "exclude": ["node_modules", "build"]
